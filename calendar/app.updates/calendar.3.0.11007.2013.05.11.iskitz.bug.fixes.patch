@@ -1,0 +1,246 @@
+Name: Calendar App Bug Fixes
+Version: 3.0.5-2013.05.11
+Author: { iskitz: Mike Lee }
+Description: This patch provides bug fixes for the core, un-patched webOS 3.0.5 Calendar application.
+
++ 2013.05.11: [__3.0.5-2013.05.11__](https://raw.github.com/iskitz/webOS/master/calendar/app.updates/calendar.3.0.11007.2013.05.11.iskitz.bug.fixes.patch)
+   + __Improved:__ Creating an event via a _Just Type Quick Action_ now closes any existing event detail popup.
+   + __Improved:__ Tapping the calendar icon when the calendar is in card view
+      + Brings it into focus, switches to Day view and updates the date shown as follows
+         + If you were in Month view, Day view shows the first day of that month or the day of the month you were last viewing.
+         + If you were in Week  view, Day view shows the first day of that week or the day of the week you were last viewing.
+         + If you were in Day   view, Day view shows the same day that was being viewed.
+      + __tip:__ To view "today" in any view, double-tap that view's icon in the view switcher bar at the bottom of the calendar.
+   + __Improved: Stability__
+      + When the calendar is closed, tapping on event alarms, search results and quick actions always opens the calendar and shows the tapped event.
+      + Switching views immediately shows the intended date instead of first quickly showing the old date.
+      + Week & Month views now safely check whether available events occur on the currently displayed day(s).
+      + All intra-app asynchronous notifications are delivered until explicitly ignored.
+         + No longer only sending the first notification.
+   + __Improved: Other things__
+      + Began minor refactoring needed to re-enable loading calendar within a browser.
+         + Primarily doing this for better calendar debugging via desktop browsers.
+         + Currently loads all resources but shows a blank view when viewed in the webOS browser; more work to be done.
+
+--- /media/cryptofs/apps/usr/palm/applications/com.palm.app.calendar/app/App.js
++++ calendar/app/app/App.js
+@@ -40,3 +40,2 @@
+-		this.loadLibraries ();
+-		!window.PalmSystem		&&	MOCK.initialize ({override: true});						// !!! Must initialize mock before creating CalendarsManager, DatabaseManager, and EventManager because it overrides their prototypes for the browser environment !!!
+-		!enyoApp.cacheManager	&&	(enyoApp.cacheManager = new calendar.CacheManager());	// Requires EventManager so needs MOCK.initialize() to happen before.
++		enyo.global.MojoLoader ? this.loadLibraries () : MOCK.initialize ({override: true});
++		!enyoApp.cacheManager && (enyoApp.cacheManager = new calendar.CacheManager());	// Requires EventManager so needs MOCK.initialize() to happen before.
+--- /media/cryptofs/apps/usr/palm/applications/com.palm.app.calendar/app/AppLaunch.js
++++ calendar/app/app/AppLaunch.js
+@@ -39,0 +40 @@
++		enyoApp.shareCurrentDate	= enyo.bind (this, this.shareCurrentDate);
+@@ -43 +43,0 @@
+-		enyoApp.shareCurrentDate	= enyo.bind (this, this.shareCurrentDate);
+@@ -206 +205,0 @@
+-
+@@ -208 +206,0 @@
+-
+@@ -212 +210 @@
+-		enyo.application.share	({firstLaunch: {data: showFirstLaunch, keep: true, wait: true}});
++		enyo.application.share	({firstLaunch: {data:showFirstLaunch, keep:true, wait:true}});
+@@ -216,4 +214,4 @@
+-		var	currentDate		= {
+-			data	: ((params && params.date && new Date (params.date)) || new Date(enyo.application.currentDate) || new Date())
+-		,	keep	: (params && "keep" in params) ? !!params.keep : true
+-		,	wait	: (params && "wait" in params) ? !!params.wait : false
++		var	currentDate =
++		{	data: new Date ((params && params.date) || enyo.application.currentDate) || new Date()
++		,	keep: (params && "keep" in params) ? !!params.keep : true
++		,	wait: (params && "wait" in params) ? !!params.wait : false
+@@ -225,2 +223,6 @@
+-		var calendarWindow	= enyo.windows.fetchWindow ("Calendar")		// Find any pre-existing Calendar GUI Window.
+-		,	enyoApp			= enyo.application
++		var	enyoApp		= enyo.application
++		,	params		= enyo.windowParams
++		,	date		= +params.date
++		,	windows		= enyo.windows
++		,	isAppOpen		= !!windows.fetchWindow ("Calendar")
++		,	view		= {data: {view:"DayView", autoDate:false}, keep:true}	// Show day view. Disable auto-propogation of the previous view's date.
+@@ -228,9 +230 @@
+-
+-		var	launchDate
+-		,	timeMachine		= this.timeMachine
+-
+-		// Show day view at launch.  Turn off auto-propogation of the previous view's date.
+-		,	view			= {data: {view:"DayView", autoDate:false}, keep: true}
+-		,	windowParams	= enyo.windowParams
+-		;
+-		calendarWindow && (view.wait = true);									// If the window already exists, make it switch views first.
++		isAppOpen && (view.wait = true);						// If the window already exists, make it switch views first.
+@@ -239,7 +233,3 @@
+-		// Set up the launch date.
+-		if ("date" in windowParams && isFinite (windowParams.date)) {
+-			timeMachine.setTime(windowParams.date);
+-			launchDate = new Date(timeMachine);
+-		} else {
+-			launchDate = new Date();
+-		}
++		date  && isFinite (date) && (date = new Date (date));
++		date  || (date = isAppOpen && enyoApp.currentDate || new Date());
++		date  && date.clearTime() && enyoApp.shareCurrentDate ({date: date});		// Update the app's displayed date.
+@@ -247,10 +236,0 @@
+-		// If the launch date is different than the current date, share it.
+-		timeMachine.setTime(+launchDate);
+-		var launch = +timeMachine.clearTime()
+-		,	current = enyoApp.currentDate && (timeMachine.setTime(+enyoApp.currentDate), +timeMachine.clearTime())
+-		;
+-
+-		if (!current || launch != current) {
+-			enyoApp.shareCurrentDate ({date: launchDate});
+-		}
+-
+@@ -258 +238 @@
+-		enyo.windows.activate ("app/calendar.html", "Calendar", windowParams);	// Activate/open the Calendar GUI window.
++		windows.activate ("app/calendar.html", "Calendar", params);			// Open and/or focus the app.
+--- /media/cryptofs/apps/usr/palm/applications/com.palm.app.calendar/app/AppView.js
++++ calendar/app/app/AppView.js
+@@ -73 +73,4 @@
+-					{className:"footerPageEffect"}
++					{className:"footerPageEffect"},
++					{name: "detailPopup", kind: enyo.ModalDialog, lazy:true, scrim:true, caption: $L("Event Details"), className: "enyo-modaldialog-customWidth", showing:false, onClose:"resetMenu", components: [
++						{name: "detailView", kind: "calendar.edit.DetailView", showing:false, onEdit:"displayEvent", onDelete:"showDeleteConfirm"}
++					]}
+@@ -85,3 +87,0 @@
+-		{name: "detailPopup", kind: enyo.ModalDialog, scrim:true, caption: $L("Event Details"), className: "enyo-modaldialog-customWidth", showing:false, onClose:"resetMenu", components: [
+-			{name: "detailView", kind: "calendar.edit.DetailView", showing:false, onEdit:"displayEvent", onDelete:"showDeleteConfirm"}
+-		]},
+@@ -119 +119 @@
+-
++this.log ("---: Created popups. detail: ", !!ui.detailPopup);
+@@ -121 +121 @@
+-		enyoApp.autoDate = true;				// When switching views (example: WeekView->DayView), use the previous view's date.
++		enyoApp.autoDate = true;		// When switching views (example: WeekView->DayView), use the previous view's date.
+@@ -167 +167 @@
+-		enyo.application.share	({showView: view});							// Ensure that "today" view is already displayed when opened with keep-alive.
++		enyo.application.share			({showView: view});		// Ensure that "today" view is already displayed when opened with keep-alive.
+@@ -195 +195,2 @@
+-		this.log(" ENYO PERF: SINGLE CLICK OCCURED time: "+ Date.now());
++		var clickTime = Date.now();
++		enyo.application.free ({showEvent:true});	// Free the showEvent from datahub just in case it's being kept.
+@@ -196,0 +198 @@
++		this.log(" ENYO PERF: SINGLE CLICK OCCURED time: "+ clickTime);
+@@ -313 +315 @@
+-		,	ui		= this.$
++		,	ui	= this.$
+@@ -320,5 +322,4 @@
+-			view				= ui.detailView;						//		cache detail view,
+-			this.viewSelected	(from, view, from);						//		trigger menu update,
+-			view.setShowing		(true);									//		trigger ContactsManager lazy loading if needed,
+-			view.setEvent		(eventGUIOrEvent);						//		update the view with the event's content,
+-			ui.detailPopup.openAtCenter();								//		then show Detail View.
++			view = ui.detailView;						//		cache detail view,
++			view.setShowing	(true);						//		trigger ContactsManager lazy loading if needed,
++			view.setEvent	(eventGUIOrEvent);				//		update the view with the event's content,
++			ui.detailPopup.openAtCenter();					//		then show Detail View.
+@@ -326 +327,2 @@
+-		} else {														// Otherwise:
++			this.viewSelected (from, view, from);				//		trigger menu update,
++		} else {								// Otherwise:
+@@ -328 +330 @@
+-			ui.pane.selectView (ui.editView);							//		then show Edit View.
++			ui.pane.selectView (ui.editView);				//		then show Edit View.
+@@ -336 +338 @@
+-			case !params || (typeof params != "object"): 	// Ensure that params exist and that they're within an object.
++			case !params || (typeof params != "object"): 			// Ensure that params exist and that they're within an object.
+@@ -339 +341 @@
+-			case ("newEvent"		in params):				// Supports "New Calendar Event" Spec on webOS Developer Network:
++			case ("newEvent"	in params):				// Supports "New Calendar Event" Spec on webOS Developer Network:
+@@ -351 +353 @@
+-				(	params.showEventDetail					// This launch param is expected to be an event id.
++				(	params.showEventDetail				// This launch param is expected to be an event id.
+@@ -358 +360 @@
+-				var eventId = params.showDetailFromReminder.eventId
++				var	eventId = params.showDetailFromReminder.eventId
+@@ -360 +362 @@
+-				,	end		= parseInt(params.showDetailFromReminder.endTime, 10)
++				,	end	= parseInt(params.showDetailFromReminder.endTime, 10)
+@@ -376,0 +379 @@
++				enyo.application.shareCurrentDate();
+@@ -378 +381,2 @@
+-		}
++		}//end:switch
++	},//end:handleLaunchParms
+@@ -380,4 +383,0 @@
+-		var view = this.$.main.getView();
+-		view && enyo.isFunction (view.currentDateChanged) && view.currentDateChanged();
+-	},
+-
+@@ -386,5 +386,2 @@
+-		if (event) {
+-			event.currentLocalStart = startTime;
+-			event.currentLocalEnd = endTime;
+-			this.displayEvent	(null, event);
+-			enyo.application.shareCurrentDate ({date:startTime/*, wait:true*/});
++		if (!event) {
++			this.error ("\tCalendar Detail From Reminder Failed: ", response, "\t");
+@@ -393 +390,4 @@
+-		this.error ("\tCalendar Detail From Reminder Failed: ", response, "\t");
++		event.currentLocalStart = startTime;
++		event.currentLocalEnd   = endTime;
++		enyo.application.share ({showEvent: {data:event, keep:true}});
++		enyo.application.shareCurrentDate ({date: new Date (+startTime)});
+@@ -398,3 +398,2 @@
+-		if (event) {
+-			this.displayEvent	(null, event);
+-			enyo.application.shareCurrentDate ({date:event.dtstart/*, wait:true*/});
++		if (!event) {
++			this.error ("\tCalendar Universal Search Failed: ", response, "\t");
+@@ -403 +402,2 @@
+-		this.error ("\tCalendar Universal Search Failed: ", response, "\t");
++		enyo.application.share ({showEvent: {data:event, keep:true}});
++		enyo.application.shareCurrentDate ({date: new Date (+event.dtstart)});
+@@ -446,3 +446,3 @@
+-	switchView: function switchView (from, i) {							// This is called when switching between views.
+-		var name = this.viewIdNameMap [i];	
+-		this.switchViewClicked.lastClickedViewName = name;				//	Set the view switching flag.
++	switchView: function switchView (from, i) {
++		var name = this.viewIdNameMap [i];
++		this.switchViewClicked.lastClickedViewName = name;
+@@ -450 +450 @@
+-		this.$.main.selectViewByName (name);							//	Switch to the selected view.
++		this.$.main.selectViewByName (name);
+@@ -454,5 +454,5 @@
+-		var nowShowing = this.$.main.getViewName();						//	Which view is currently showing
+-		if(nowShowing == this.switchViewClicked.lastClickedViewName){	//	Is that the last-clicked view, meaning we're already showing it?
+-			this.showDate();											//  Then show today within the current view.
+-		}		
+-		return true;													//	Stop the click event from being handled by any ancestor component.
++		var nowShowing = this.$.main.getViewName();			// Get the name of the currently showing view
++		if (nowShowing == this.switchViewClicked.lastClickedViewName){	// If it's the last-clicked view
++			this.showDate();					//	Update it to show today.
++		}
++		return true;							// Don't send the click event to ancestor component(s).
+--- /media/cryptofs/apps/usr/palm/applications/com.palm.app.calendar/app/day/DayView.js
++++ calendar/app/app/day/DayView.js
+@@ -200,2 +200,2 @@
+-		var dateString = String(+this.date)
+-		,	day = this.days && this.days[dateString] && (this.day = this.days[dateString])
++		var	dateString	= String(+this.date)
++		,	day		= this.days && this.days[dateString] && (this.day = this.days[dateString])
+--- /media/cryptofs/apps/usr/palm/applications/com.palm.app.calendar/app/month/MonthView.js
++++ calendar/app/app/month/MonthView.js
+@@ -104 +104 @@
+-		if(!days[String(+this.date)]) {					// Skip modifying child days if this month's date isn't present in the days object.
++		if (!days || !days[String(+this.date)]) {		// Skip modifying child days if this month's date isn't present in the days object.
+@@ -107,3 +107 @@
+-		var	weeks = this.weeks;
+-
+-		for (var i=0, numWeeks = weeks.length; i < numWeeks; i++) {
++		for (var weeks=this.weeks, i=0, numWeeks = weeks.length; i < numWeeks; i++) {
+--- /media/cryptofs/apps/usr/palm/applications/com.palm.app.calendar/app/week/WeekView.js
++++ calendar/app/app/week/WeekView.js
+@@ -130 +130 @@
+-		if(!days[String(+this.date)]) {					// Skip modifying child days if this week's date isn't present in the days object.
++		if (!days || !days[String(+this.date)]) {		// Skip modifying child days if this week's date isn't present in the days object.
+--- /media/cryptofs/apps/usr/palm/applications/com.palm.app.calendar/libs/DataHub.js
++++ calendar/app/libs/DataHub.js
+@@ -12 +12 @@
+-		myObject.share ({ something: { data:This is fun!" }});
++		myObject.share ({ something: { data: "This is fun!" }});
+@@ -195 +194,0 @@
+-			watcher.sharing && delete (watcher.sharing [property]);
