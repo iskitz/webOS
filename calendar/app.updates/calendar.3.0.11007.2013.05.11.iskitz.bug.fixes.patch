@@ -3,7 +3,7 @@ Version: 3.0.5-2013.05.11
 Author: { iskitz: Mike Lee }
 Description: This patch provides bug fixes for the core, un-patched webOS 3.0.5 Calendar application.
 
-+ 2013.05.11: [__3.0.5-2013.05.11__](https://raw.github.com/iskitz/webOS/master/calendar/app.updates/calendar.3.0.11007.2013.05.11.iskitz.bug.fixes.patch)
++ 2013.05.11: [__3.0.5-2013.05.11__](https://raw.github.com/iskitz/webOS/public/calendar/app.updates/calendar.3.0.11007.2013.05.11.iskitz.bug.fixes.patch)
    + __Improved:__ Creating an event via a _Just Type Quick Action_ now closes any existing event detail popup.
    + __Improved:__ Tapping the calendar icon when the calendar is in card view
       + Brings it into focus, switches to Day view and updates the date shown as follows
